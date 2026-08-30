@@ -4,6 +4,7 @@ Exchange support utils
 
 import inspect
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 from math import ceil, floor, isnan
 from typing import Any
 
@@ -69,6 +70,16 @@ def _exchange_has_helper(ex_mod: ccxt.Exchange, required: dict[str, list[str]]) 
     ]
 
 
+@lru_cache
+def _ft_exchange_has_overrides(exchange: str) -> tuple[tuple[str, bool], ...]:
+    import freqtrade.exchange as ft_exchange
+
+    name = MAP_EXCHANGE_CHILDCLASS.get(exchange.lower(), exchange.lower()).title()
+    ex_class = getattr(ft_exchange, name, None)
+    overrides = getattr(ex_class, "_ft_has", {}).get("exchange_has_overrides", {})
+    return tuple(overrides.items())
+
+
 def validate_exchange(exchange: str) -> tuple[bool, str, str, ccxt.Exchange | None]:
     """
     returns: can_use, reason, exchange_object
@@ -81,6 +92,9 @@ def validate_exchange(exchange: str) -> tuple[bool, str, str, ccxt.Exchange | No
 
     if not ex_mod or not ex_mod.has:
         return False, "", "", None
+
+    if overrides := _ft_exchange_has_overrides(exchange):
+        ex_mod.has = {**ex_mod.has, **dict(overrides)}
 
     result = True
     reasons = []

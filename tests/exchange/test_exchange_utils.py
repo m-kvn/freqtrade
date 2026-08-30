@@ -27,9 +27,13 @@ from freqtrade.exchange import (
     timeframe_to_prev_date,
     timeframe_to_resample_freq,
     timeframe_to_seconds,
+    validate_exchange,
 )
 from freqtrade.exchange.check_exchange import check_exchange
-from freqtrade.exchange.exchange_utils import _exchange_has_helper
+from freqtrade.exchange.exchange_utils import (
+    _exchange_has_helper,
+    _ft_exchange_has_overrides,
+)
 from tests.conftest import log_has_re
 
 
@@ -426,3 +430,23 @@ def test_exchange__exchange_has_helper():
     }
     missing = _exchange_has_helper(e_mod, required)
     assert set(missing) == {"fetchOHLCV", "fetchMyTrades", "fetchOrder"}
+
+
+def test_ft_exchange_has_overrides():
+    assert _ft_exchange_has_overrides("binance") == ()
+    assert _ft_exchange_has_overrides("nonexistent_exchange") == ()
+
+    overrides = dict(_ft_exchange_has_overrides("massive"))
+    assert overrides == {
+        "createOrder": True,
+        "cancelOrder": True,
+        "fetchOrder": True,
+        "fetchBalance": True,
+    }
+
+
+def test_validate_exchange_honors_ft_has_overrides():
+    valid, reason, _, ex_mod = validate_exchange("massive")
+    assert valid is True
+    assert "missing:" not in reason
+    assert ex_mod.has["createOrder"] is True
