@@ -370,6 +370,7 @@ class Backtesting:
             fail_without_data=True,
             data_format=self.config["dataformat_ohlcv"],
             candle_type=self.config.get("candle_type_def", CandleType.SPOT),
+            fill_up_missing=self.exchange.get_option("ohlcv_fill_missing", True),
         )
 
         min_date, max_date = history.get_timerange(data)
@@ -410,6 +411,7 @@ class Backtesting:
                 fail_without_data=True,
                 data_format=self.config["dataformat_ohlcv"],
                 candle_type=self.config.get("candle_type_def", CandleType.SPOT),
+                fill_up_missing=self.exchange.get_option("ohlcv_fill_missing", True),
             )
         else:
             self.detail_data = {}
