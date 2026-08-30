@@ -73,6 +73,25 @@ class Massive(Exchange):
         limit = min(limit, MAX_LOOKBACK_SECONDS // timeframe_secs)
         return max(1, min(limit, MAX_BASE_AGGREGATES))
 
+    async def _async_get_candle_history(
+        self,
+        pair: str,
+        timeframe: str,
+        candle_type: CandleType,
+        since_ms: int | None = None,
+    ):
+        (
+            pair,
+            timeframe,
+            candle_type,
+            data,
+            drop_incomplete,
+        ) = await super()._async_get_candle_history(pair, timeframe, candle_type, since_ms)
+        if data and timeframe_to_seconds(timeframe) >= DAY_IN_SECONDS:
+            day_ms = DAY_IN_SECONDS * 1000
+            data = [[candle[0] - (candle[0] % day_ms), *candle[1:]] for candle in data]
+        return pair, timeframe, candle_type, data, drop_incomplete
+
     def market_is_open(self) -> bool:
         cached = self._market_status_cache.get("is_open")
         if cached is not None:
