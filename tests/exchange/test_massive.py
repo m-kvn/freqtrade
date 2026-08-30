@@ -1,11 +1,20 @@
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 import ccxt
 import pytest
 
 from freqtrade.enums import CandleType
+from freqtrade.exchange import timeframe_to_seconds
+from freqtrade.exchange.massive import BASE_AGGREGATE_SECONDS, MAX_BASE_AGGREGATES
 from freqtrade.util import dt_ts
 from tests.conftest import EXMS, get_patched_exchange
+
+
+def massive_api_mock() -> MagicMock:
+    api_mock = MagicMock()
+    api_mock.timeframes = ccxt.massive().timeframes
+    return api_mock
 
 
 @pytest.mark.parametrize(
@@ -54,7 +63,7 @@ def test_massive_now_is_time_to_refresh(default_conf, mocker, state, age_msecs, 
     exchange = get_patched_exchange(mocker, default_conf, api_mock, exchange="massive")
     exchange._last_market_open_ts = dt_ts() - age_msecs
 
-    assert exchange._now_is_time_to_refresh("AAPL/USD", "1d", CandleType.SPOT) is expected
+    assert exchange._now_is_time_to_refresh("AAPL/USD", "5m", CandleType.SPOT) is expected
 
 
 def test_massive_now_is_time_to_refresh_respects_base(default_conf, mocker):
@@ -63,7 +72,7 @@ def test_massive_now_is_time_to_refresh_respects_base(default_conf, mocker):
     api_mock.fetch_status = MagicMock(return_value={"info": {"market": "open"}})
     exchange = get_patched_exchange(mocker, default_conf, api_mock, exchange="massive")
 
-    assert exchange._now_is_time_to_refresh("AAPL/USD", "1d", CandleType.SPOT) is False
+    assert exchange._now_is_time_to_refresh("AAPL/USD", "5m", CandleType.SPOT) is False
     assert api_mock.fetch_status.call_count == 0
 
 
@@ -94,3 +103,64 @@ def test_massive_process_ohlcv_df_no_fillup(default_conf, mocker, exchange_name,
 
     assert len(df) == expected_rows
     assert (df["volume"] == 0).sum() == expected_rows - 3
+
+
+@pytest.mark.parametrize(
+    "timeframe,expected",
+    [
+        ("1s", 50000),
+        ("5s", 10000),
+        ("1m", 50000),
+        ("5m", 10000),
+        ("15m", 3333),
+        ("1h", 833),
+        ("4h", 208),
+        ("1d", 50000),
+        ("1w", 7142),
+    ],
+)
+def test_massive_ohlcv_candle_limit(default_conf, mocker, timeframe, expected):
+    exchange = get_patched_exchange(mocker, default_conf, massive_api_mock(), exchange="massive")
+    assert exchange.ohlcv_candle_limit(timeframe, CandleType.SPOT) == expected
+
+
+def test_massive_ohlcv_candle_limit_never_exceeds_cap(default_conf, mocker):
+    exchange = get_patched_exchange(mocker, default_conf, massive_api_mock(), exchange="massive")
+    for timeframe, spec in exchange._api.timeframes.items():
+        base_seconds = BASE_AGGREGATE_SECONDS[str(spec).partition("/")[2]]
+        limit = exchange.ohlcv_candle_limit(timeframe, CandleType.SPOT)
+        assert limit >= 1
+        assert limit * timeframe_to_seconds(timeframe) / base_seconds <= MAX_BASE_AGGREGATES
+
+
+def test_massive_ohlcv_candle_limit_unknown_timeframe(default_conf, mocker):
+    exchange = get_patched_exchange(mocker, default_conf, massive_api_mock(), exchange="massive")
+    assert exchange.ohlcv_candle_limit("7m", CandleType.SPOT) == 5000
+
+
+def test_massive_daily_refresh_not_utc_aligned(default_conf, mocker, time_machine):
+    time_machine.move_to("2026-08-27 15:00:00 +00:00", tick=False)
+    api_mock = MagicMock()
+    api_mock.fetch_status = MagicMock(return_value={"info": {"market": "open"}})
+    massive = get_patched_exchange(mocker, default_conf, api_mock, exchange="massive")
+    binance = get_patched_exchange(mocker, default_conf, exchange="binance")
+
+    key = ("AAPL/USD", "1d", CandleType.SPOT)
+    stamped = dt_ts(datetime(2026, 8, 26, 4, 0, tzinfo=UTC))
+    massive._pairs_last_refresh_time[key] = stamped
+    binance._pairs_last_refresh_time[key] = stamped
+
+    assert binance._now_is_time_to_refresh(*key) is False
+    assert massive._now_is_time_to_refresh(*key) is True
+
+
+def test_massive_daily_refresh_within_timeframe(default_conf, mocker, time_machine):
+    time_machine.move_to("2026-08-27 15:00:00 +00:00", tick=False)
+    api_mock = MagicMock()
+    api_mock.fetch_status = MagicMock(return_value={"info": {"market": "open"}})
+    massive = get_patched_exchange(mocker, default_conf, api_mock, exchange="massive")
+
+    key = ("AAPL/USD", "1d", CandleType.SPOT)
+    massive._pairs_last_refresh_time[key] = dt_ts(datetime(2026, 8, 27, 4, 0, tzinfo=UTC))
+
+    assert massive._now_is_time_to_refresh(*key) is False
