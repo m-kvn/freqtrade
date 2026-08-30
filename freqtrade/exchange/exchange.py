@@ -140,6 +140,7 @@ class Exchange:
         "ohlcv_has_history": True,  # Some exchanges (Kraken) don't provide history via ohlcv
         "ohlcv_partial_candle": True,
         "ohlcv_require_since": False,
+        "ohlcv_fill_missing": True,
         "download_data_parallel_quick": True,
         "always_require_api_keys": False,  # purge API keys for Dry-run. Must default to false.
         # Check https://github.com/ccxt/ccxt/issues/10767 for removal of ohlcv_volume_currency
@@ -2854,7 +2855,7 @@ class Exchange:
             ticks,
             timeframe,
             pair=pair,
-            fill_missing=not has_cache,
+            fill_missing=self._ft_has["ohlcv_fill_missing"] and not has_cache,
             drop_incomplete=drop_incomplete,
             candle_type=c_type,
         )
@@ -2867,7 +2868,7 @@ class Exchange:
                     concat([old, ohlcv_df], axis=0),
                     timeframe,
                     pair,
-                    fill_missing=True,
+                    fill_missing=self._ft_has["ohlcv_fill_missing"],
                     drop_incomplete=False,
                     candle_type=c_type,
                 )

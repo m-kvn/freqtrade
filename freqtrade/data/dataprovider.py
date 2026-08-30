@@ -332,6 +332,11 @@ class DataProvider:
                 timerange=timerange,
                 data_format=self._config["dataformat_ohlcv"],
                 candle_type=_candle_type,
+                fill_up_missing=(
+                    self._exchange.get_option("ohlcv_fill_missing", True)
+                    if self._exchange
+                    else True
+                ),
             )
         return self.__cached_pairs_backtesting[saved_pair].copy()
 
