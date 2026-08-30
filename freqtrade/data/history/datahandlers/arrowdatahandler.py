@@ -83,7 +83,7 @@ class ArrowDataHandler(IDataHandler):
             filename = self._pair_data_filename(
                 self._datadir, pair, timeframe, candle_type=candle_type, no_timeframe_modify=True
             )
-            if not filename.exists():
+            if not self._exists_case_sensitive(filename):
                 return self._empty_ohlcv_df(candle_type)
         try:
             pairdata = self._load_ohlcv_dataframe(filename, timeframe, timerange)

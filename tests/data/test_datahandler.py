@@ -912,3 +912,21 @@ def test_ohlcv_load_pushdown_fallback(feather_dh, mocker, caplog, exception):
 
     assert log_has_re("Unable to use Arrow filtering, loading entire ohlcv file.*", caplog)
     assert_frame_equal(expected, out, check_exact=True)
+
+
+def test_datahandler_1M_does_not_load_1m_on_case_insensitive_fs(testdatadir, tmp_path):
+    from freqtrade.data.history.datahandlers.featherdatahandler import FeatherDataHandler
+
+    minute_file = tmp_path / "XRP_USDT-1m.feather"
+    ohlcv_to_dataframe(
+        [[1638230400000, 2.0, 2.1, 1.9, 2.05, 100.0]], "1m", "XRP/USDT", fill_missing=False
+    ).to_feather(minute_file)
+
+    dh = FeatherDataHandler(tmp_path)
+    # The legacy "-1M" fallback must not resolve to the "-1m" file, which it does on
+    # case-insensitive filesystems (Windows, macOS).
+    assert dh._exists_case_sensitive(tmp_path / "XRP_USDT-1M.feather") is False
+    assert dh._exists_case_sensitive(minute_file) is True
+
+    monthly = dh._ohlcv_load("XRP/USDT", "1M", None, CandleType.SPOT)
+    assert monthly.empty

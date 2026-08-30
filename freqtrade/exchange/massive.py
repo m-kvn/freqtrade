@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 MARKET_OPEN_STATES = ("open", "extended-hours")
 MAX_BASE_AGGREGATES = 50000
 DAY_IN_SECONDS = 86400
+MAX_LOOKBACK_SECONDS = 20 * 365 * DAY_IN_SECONDS
 BASE_AGGREGATE_SECONDS = {
     "second": 1,
     "minute": 60,
@@ -69,6 +70,7 @@ class Massive(Exchange):
         if not base_seconds or not timeframe_secs:
             return super().ohlcv_candle_limit(timeframe, candle_type, since_ms)
         limit = MAX_BASE_AGGREGATES * base_seconds // timeframe_secs
+        limit = min(limit, MAX_LOOKBACK_SECONDS // timeframe_secs)
         return max(1, min(limit, MAX_BASE_AGGREGATES))
 
     def market_is_open(self) -> bool:

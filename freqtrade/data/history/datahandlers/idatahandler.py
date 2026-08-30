@@ -381,6 +381,10 @@ class IDataHandler(ABC):
         return filename
 
     @staticmethod
+    def _exists_case_sensitive(filename) -> bool:
+        return filename.exists() and filename.resolve().name == filename.name
+
+    @staticmethod
     def timeframe_to_file(timeframe: str):
         return timeframe.replace("M", "Mo")
 

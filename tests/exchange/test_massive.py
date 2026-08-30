@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 import ccxt
@@ -6,8 +6,12 @@ import pytest
 
 from freqtrade.enums import CandleType
 from freqtrade.exchange import timeframe_to_seconds
-from freqtrade.exchange.massive import BASE_AGGREGATE_SECONDS, MAX_BASE_AGGREGATES
-from freqtrade.util import dt_ts
+from freqtrade.exchange.massive import (
+    BASE_AGGREGATE_SECONDS,
+    MAX_BASE_AGGREGATES,
+    MAX_LOOKBACK_SECONDS,
+)
+from freqtrade.util import dt_humanize_delta, dt_now, dt_ts
 from tests.conftest import EXMS, get_patched_exchange
 
 
@@ -115,8 +119,9 @@ def test_massive_process_ohlcv_df_no_fillup(default_conf, mocker, exchange_name,
         ("15m", 3333),
         ("1h", 833),
         ("4h", 208),
-        ("1d", 50000),
-        ("1w", 7142),
+        ("1d", 7300),
+        ("1w", 1042),
+        ("1M", 243),
     ],
 )
 def test_massive_ohlcv_candle_limit(default_conf, mocker, timeframe, expected):
@@ -164,3 +169,12 @@ def test_massive_daily_refresh_within_timeframe(default_conf, mocker, time_machi
     massive._pairs_last_refresh_time[key] = dt_ts(datetime(2026, 8, 27, 4, 0, tzinfo=UTC))
 
     assert massive._now_is_time_to_refresh(*key) is False
+
+
+def test_massive_ohlcv_candle_limit_lookback_stays_after_epoch(default_conf, mocker):
+    exchange = get_patched_exchange(mocker, default_conf, massive_api_mock(), exchange="massive")
+    for timeframe in exchange._api.timeframes:
+        limit = exchange.ohlcv_candle_limit(timeframe, CandleType.SPOT)
+        one_call_secs = limit * timeframe_to_seconds(timeframe)
+        assert one_call_secs <= MAX_LOOKBACK_SECONDS
+        dt_humanize_delta(dt_now() - timedelta(seconds=one_call_secs))
